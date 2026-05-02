@@ -1,0 +1,39 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# MLflow
+mlruns/
+mlartifacts/
+
+# Training outputs
+runs/
+
+# Checkpoints
+*.pt
+*.pth
+*.onnx
+!models/*.onnx
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Env
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+
+# Dataset (images + labels, ~3GB — ne pas versionner)
+dataset/
+
+# OS
+.DS_Store
+Thumbs.db

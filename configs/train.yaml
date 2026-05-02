@@ -1,0 +1,39 @@
+model:
+  onnx_path: models/sim_data_det_0126.onnx
+  output_dir: runs/
+  freeze_ratio: 0.7
+
+training:
+  epochs: 50
+  batch_size: 16
+  num_workers: 4
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-4
+  lr_scheduler: cosine        # cosine | step | none
+  warmup_epochs: 3
+  grad_clip_norm: 10.0
+  val_every_n_epochs: 1
+  save_best_metric: "val/mAP50"
+
+loss:
+  box_weight: 5.0
+  cls_weight: 1.0
+  obj_weight: 1.0
+  label_smoothing: 0.1
+
+augmentation:
+  enabled: true
+  horizontal_flip: 0.5
+  random_brightness_contrast: 0.3
+  hue_saturation_value: 0.3
+  random_scale_min: 0.5
+  random_scale_max: 1.5
+  mosaic: false
+
+mlflow:
+  tracking_uri: mlruns/
+  experiment_name: torso21-sim2real
+  tags:
+    dataset: TORSO-21-reality
+    base_model: sim_data_det_0126
+    task: sim-to-real-finetune
