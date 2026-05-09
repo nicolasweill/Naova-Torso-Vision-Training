@@ -1,0 +1,23 @@
+dataset:
+  root: dataset/
+  train:
+    images_dir: train/images
+    labels_dir: train
+  test:
+    images_dir: test/images
+    labels_dir: test
+  image_extensions: [".png", ".jpg", ".jpeg"]
+  input_size: [320, 320]
+  normalize_mean: [0.485, 0.456, 0.406]
+  normalize_std: [0.229, 0.224, 0.225]
+
+classes:
+  num_classes: 7
+  names:
+    0: ball
+    1: goalpost
+    2: robot
+    3: obstacle
+    4: L-Intersection
+    5: T-Intersection
+    6: X-Intersection
