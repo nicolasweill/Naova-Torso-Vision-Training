@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Documentation TrainOnnxDet</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+  --accent: #0969da; --code-bg: #f6f8fa; --warn-bg: #fff8c5; --warn-border: #d4a72c;
+  --side-w: 250px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+    --accent: #4493f8; --code-bg: #161b22; --warn-bg: #3a2f08; --warn-border: #9e6a03;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+nav {
+  position: fixed; top: 0; left: 0; bottom: 0; width: var(--side-w);
+  overflow-y: auto; padding: 24px 16px; border-right: 1px solid var(--border);
+  background: var(--bg);
+}
+nav .brand { font-weight: 700; font-size: 1.1rem; margin-bottom: 16px; display: block; color: var(--fg); text-decoration: none; }
+nav a { display: block; padding: 4px 8px; color: var(--muted); text-decoration: none; border-radius: 6px; font-size: .92rem; }
+nav a:hover { background: var(--code-bg); color: var(--fg); }
+nav a.sub { padding-left: 22px; font-size: .86rem; }
+main { margin-left: var(--side-w); max-width: 920px; padding: 32px 40px 80px; }
+h1 { font-size: 2rem; margin-top: 0; }
+h2 { margin-top: 3rem; padding-bottom: .3rem; border-bottom: 1px solid var(--border); scroll-margin-top: 16px; }
+h3 { margin-top: 2rem; scroll-margin-top: 16px; }
+a { color: var(--accent); }
+code { background: var(--code-bg); padding: .15em .4em; border-radius: 5px; font-size: .88em; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+pre { background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border); }
+pre code { background: none; padding: 0; font-size: .85rem; }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .93rem; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: 7px 12px; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+.note { background: var(--warn-bg); border-left: 4px solid var(--warn-border); padding: 10px 16px; border-radius: 6px; margin: 1rem 0; }
+.note p { margin: .3rem 0; }
+.lead { color: var(--muted); font-size: 1.05rem; }
+.pill { display: inline-block; background: var(--code-bg); border: 1px solid var(--border); border-radius: 999px; padding: 1px 10px; font-size: .82rem; margin: 2px 4px 2px 0; }
+@media (max-width: 860px) {
+  nav { position: static; width: auto; border-right: 0; border-bottom: 1px solid var(--border); padding: 16px; }
+  main { margin-left: 0; padding: 24px 16px 60px; }
+}
+</style>
+</head>
+<body>
+<nav>
+  <a class="brand" href="#top">TrainOnnxDet</a>
+  <a href="#apercu">Aperçu</a>
+  <a href="#installation">Installation</a>
+  <a href="#structure">Structure du repo</a>
+  <a href="#dataset">Dataset TORSO-21</a>
+  <a href="#config">Configuration</a>
+  <a class="sub" href="#config-dataset">dataset.yaml</a>
+  <a class="sub" href="#config-train">train.yaml</a>
+  <a href="#entrainement">Entraînement</a>
+  <a class="sub" href="#pipeline">Pipeline</a>
+  <a class="sub" href="#freeze">Stratégie de gel</a>
+  <a class="sub" href="#loss">Loss</a>
+  <a class="sub" href="#metriques">Métriques</a>
+  <a href="#inference">Inférence</a>
+  <a href="#mlflow">MLflow</a>
+  <a href="#api">Référence des modules</a>
+  <a href="#tests">Tests</a>
+  <a href="#limites">Points d'attention</a>
+</nav>
+
+<main id="top">
+<h1>TrainOnnxDet</h1>
+<p class="lead">Fine-tuning sim-to-real d'un modèle de détection ONNX (entraîné sur des données simulées RoboCup) sur le dataset TORSO-21 reality, avec suivi des expériences MLflow.</p>
+<p>
+  <span class="pill">Python ≥ 3.10</span>
+  <span class="pill">PyTorch ≥ 2.2</span>
+  <span class="pill">ONNX Runtime</span>
+  <span class="pill">onnx2torch</span>
+  <span class="pill">MLflow</span>
+  <span class="pill">Albumentations</span>
+</p>
+
+<h2 id="apercu">Aperçu</h2>
+<p>Le projet prend un modèle ONNX de détection pré-entraîné en simulation (<code>models/sim_data_det_0126.onnx</code>), le convertit en module PyTorch avec <code>onnx2torch</code>, gèle une partie du réseau pour limiter l'oubli du domaine simulé, puis l'affine sur des images réelles de TORSO-21. Le meilleur checkpoint est ensuite réexporté en ONNX et publié comme artefact MLflow.</p>
+<ul>
+  <li><b>Entraînement</b> : <code>scripts/train.py</code>, CUDA par défaut avec repli CPU.</li>
+  <li><b>Inférence</b> : <code>scripts/infer.py</code>, fonctionne avec n'importe quel modèle ONNX de détection (YOLO-v5, YOLO-v8, SSD détectés automatiquement).</li>
+  <li><b>Suivi</b> : paramètres, métriques par époque, artefacts et tags Git/hôte dans <code>mlruns/</code>.</li>
+</ul>
+
+<h2 id="installation">Installation</h2>
+<pre><code>pip install -e .
+
+# Vérifier le montage sans entraîner (charge les données et le modèle)
+python scripts/train.py --dry-run</code></pre>
+<p>Les dépendances sont listées dans <code>requirements.txt</code> et <code>setup.py</code> (torch, torchvision, onnx, onnxruntime, onnx2torch, mlflow, numpy &lt; 2, opencv-python-headless, Pillow, albumentations, PyYAML, tqdm, pytest).</p>
+<h3>Inférence GPU</h3>
+<pre><code>pip uninstall onnxruntime
+pip install onnxruntime-gpu</code></pre>
+<p>Sans <code>onnxruntime-gpu</code>, l'inférence tourne sur CPU. Avec <code>--device cuda</code> et sans le provider CUDA, une <code>RuntimeError</code> est levée.</p>
+
+<h2 id="structure">Structure du repo</h2>
+<table>
+<tr><th>Chemin</th><th>Rôle</th></tr>
+<tr><td><code>configs/dataset.yaml</code></td><td>Chemins du dataset, taille d'entrée, normalisation, classes</td></tr>
+<tr><td><code>configs/train.yaml</code></td><td>Modèle, hyperparamètres, loss, augmentation, MLflow</td></tr>
+<tr><td><code>models/</code></td><td>Modèle ONNX de base (<code>sim_data_det_0126.onnx</code>)</td></tr>
+<tr><td><code>scripts/train.py</code></td><td>Point d'entrée de l'entraînement</td></tr>
+<tr><td><code>scripts/infer.py</code></td><td>Point d'entrée de l'inférence</td></tr>
+<tr><td><code>src/torso/data/</code></td><td><code>dataset.py</code> (Dataset, letterbox, parsing YOLO), <code>transforms.py</code> (augmentations), <code>utils.py</code> (collate)</td></tr>
+<tr><td><code>src/torso/model/</code></td><td><code>loader.py</code> (ONNX vers PyTorch, gel), <code>head.py</code> (décodage des sorties), <code>exporter.py</code> (PyTorch vers ONNX)</td></tr>
+<tr><td><code>src/torso/training/</code></td><td><code>trainer.py</code>, <code>loss.py</code>, <code>metrics.py</code></td></tr>
+<tr><td><code>src/torso/inference/</code></td><td><code>onnx_runner.py</code> (ONNX Runtime), <code>postprocess.py</code> (décodage + NMS en numpy)</td></tr>
+<tr><td><code>src/torso/utils/</code></td><td><code>device.py</code>, <code>mlflow_utils.py</code>, <code>visualization.py</code></td></tr>
+<tr><td><code>tests/</code></td><td>Tests unitaires (dataset, post-traitement)</td></tr>
+<tr><td><code>dataset/</code></td><td>Données TORSO-21, non versionnées</td></tr>
+<tr><td><code>runs/</code>, <code>mlruns/</code></td><td>Sorties d'entraînement et store MLflow, ignorés par Git</td></tr>
+</table>
+
+<h2 id="dataset">Dataset TORSO-21</h2>
+<table>
+<tr><th>Split</th><th>Images</th><th>Labels</th></tr>
+<tr><td>Train</td><td>4 345</td><td>8 894</td></tr>
+<tr><td>Test</td><td>1 570</td><td>1 570</td></tr>
+</table>
+<p><b>7 classes</b> :</p>
+<table>
+<tr><th>ID</th><th>0</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr>
+<tr><th>Nom</th><td>ball</td><td>goalpost</td><td>robot</td><td>obstacle</td><td>L-Intersection</td><td>T-Intersection</td><td>X-Intersection</td></tr>
+</table>
+<h3>Organisation attendue sur disque</h3>
+<pre><code>dataset/
+  train/
+    images/  img001.png, img002.jpg, ...
+    img001.txt, img002.txt, ...      # un .txt par image, à côté du dossier images/
+  test/
+    images/
+    *.txt</code></pre>
+<p>Format des labels YOLO, une ligne par objet, coordonnées normalisées dans [0, 1] :</p>
+<pre><code>class_id x_center y_center width height</code></pre>
+<p>Règles appliquées par <code>Torso21Dataset</code> :</p>
+<ul>
+  <li>Une image sans fichier label est ignorée (comptée comme « skipped » dans les logs).</li>
+  <li>Un fichier label vide est conservé : c'est une image de fond sans objet.</li>
+  <li>Les lignes mal formées, avec un <code>class_id</code> hors plage ou des coordonnées hors [0, 1] sont ignorées avec un warning.</li>
+  <li>Chaque image est passée en RGB puis redimensionnée en <b>letterbox</b> (ratio conservé, padding gris 114) vers <code>input_size</code>, et les boîtes sont recalculées en conséquence.</li>
+</ul>
+
+<h2 id="config">Configuration</h2>
+<h3 id="config-dataset"><code>configs/dataset.yaml</code></h3>
+<table>
+<tr><th>Clé</th><th>Valeur par défaut</th><th>Description</th></tr>
+<tr><td><code>dataset.root</code></td><td><code>dataset/</code></td><td>Racine des données</td></tr>
+<tr><td><code>dataset.train.labels_dir</code> / <code>test.labels_dir</code></td><td><code>train</code> / <code>test</code></td><td>Dossier du split (le premier segment du chemin est utilisé)</td></tr>
+<tr><td><code>dataset.input_size</code></td><td><code>[640, 640]</code></td><td>Taille d'entrée (H, W)</td></tr>
+<tr><td><code>dataset.normalize_mean/std</code></td><td>Stats ImageNet</td><td>Voir « Points d'attention »</td></tr>
+<tr><td><code>classes.num_classes</code></td><td><code>7</code></td><td>Nombre de classes</td></tr>
+<tr><td><code>classes.names</code></td><td>0 à 6</td><td>Noms des classes, utilisés par <code>infer.py</code> pour l'affichage</td></tr>
+</table>
+
+<h3 id="config-train"><code>configs/train.yaml</code></h3>
+<table>
+<tr><th>Section.clé</th><th>Défaut</th><th>Description</th></tr>
+<tr><td><code>model.onnx_path</code></td><td><code>models/sim_data_det_0126.onnx</code></td><td>Modèle de départ</td></tr>
+<tr><td><code>model.output_dir</code></td><td><code>runs/</code></td><td>Dossier des sorties (un sous-dossier par run)</td></tr>
+<tr><td><code>model.freeze_ratio</code></td><td><code>0.7</code></td><td>Fraction des paramètres gelés (les premiers)</td></tr>
+<tr><td><code>training.epochs</code></td><td><code>50</code></td><td>Nombre d'époques</td></tr>
+<tr><td><code>training.batch_size</code></td><td><code>16</code></td><td>Taille de batch</td></tr>
+<tr><td><code>training.num_workers</code></td><td><code>4</code></td><td>Workers du DataLoader</td></tr>
+<tr><td><code>training.learning_rate</code></td><td><code>1e-4</code></td><td>LR de base (AdamW)</td></tr>
+<tr><td><code>training.weight_decay</code></td><td><code>1e-4</code></td><td>Weight decay</td></tr>
+<tr><td><code>training.lr_scheduler</code></td><td><code>cosine</code></td><td><code>cosine</code>, <code>step</code> (pas de 10, gamma 0.5) ou <code>none</code></td></tr>
+<tr><td><code>training.warmup_epochs</code></td><td><code>3</code></td><td>Montée linéaire du LR sur les premières époques</td></tr>
+<tr><td><code>training.grad_clip_norm</code></td><td><code>10.0</code></td><td>Norme maximale du gradient</td></tr>
+<tr><td><code>training.val_every_n_epochs</code></td><td><code>1</code></td><td>Fréquence de validation</td></tr>
+<tr><td><code>training.save_best_metric</code></td><td><code>val/mAP50</code></td><td>Métrique qui décide du meilleur checkpoint</td></tr>
+<tr><td><code>loss.box_weight / cls_weight / obj_weight</code></td><td><code>5.0 / 1.0 / 1.0</code></td><td>Pondérations de la loss</td></tr>
+<tr><td><code>loss.label_smoothing</code></td><td><code>0.1</code></td><td>Lissage des labels de classe</td></tr>
+<tr><td><code>augmentation.enabled</code></td><td><code>true</code></td><td>Active les augmentations</td></tr>
+<tr><td><code>augmentation.horizontal_flip</code></td><td><code>0.5</code></td><td>Probabilité du flip horizontal</td></tr>
+<tr><td><code>augmentation.random_brightness_contrast</code></td><td><code>0.3</code></td><td>Probabilité luminosité/contraste</td></tr>
+<tr><td><code>augmentation.hue_saturation_value</code></td><td><code>0.3</code></td><td>Probabilité teinte/saturation/valeur</td></tr>
+<tr><td><code>augmentation.random_scale_min/max</code></td><td><code>0.5 / 1.5</code></td><td>Lues mais non appliquées (voir « Points d'attention »)</td></tr>
+<tr><td><code>augmentation.mosaic</code></td><td><code>false</code></td><td>Non implémenté</td></tr>
+<tr><td><code>mlflow.tracking_uri</code></td><td><code>mlruns/</code></td><td>Store MLflow</td></tr>
+<tr><td><code>mlflow.experiment_name</code></td><td><code>torso21-sim2real</code></td><td>Nom de l'expérience</td></tr>
+<tr><td><code>mlflow.tags</code></td><td>dataset, base_model, task</td><td>Tags ajoutés à chaque run</td></tr>
+</table>
+
+<h2 id="entrainement">Entraînement</h2>
+<pre><code>python scripts/train.py \
+    --config   configs/train.yaml \
+    --dataset  configs/dataset.yaml \
+    --device   auto \                # auto | cuda | cpu
+    --run-name "lr1e-4-freeze70" \   # nom du run MLflow et du dossier runs/
+    --resume   runs/exp1/best.pt \   # reprise depuis un checkpoint
+    --epochs   50 \                  # écrase train.yaml
+    --batch-size 16 \                # écrase train.yaml
+    --dry-run                        # valide le pipeline puis quitte</code></pre>
+<table>
+<tr><th>Option</th><th>Défaut</th><th>Effet</th></tr>
+<tr><td><code>--config</code></td><td><code>configs/train.yaml</code></td><td>YAML d'entraînement</td></tr>
+<tr><td><code>--dataset</code></td><td><code>configs/dataset.yaml</code></td><td>YAML du dataset</td></tr>
+<tr><td><code>--device</code></td><td><code>auto</code></td><td><code>auto</code> prend CUDA si disponible, <code>cuda</code> échoue sinon, <code>cpu</code> force le CPU</td></tr>
+<tr><td><code>--run-name</code></td><td>aucun</td><td>Nom du run ; sans nom, le dossier est <code>run_&lt;timestamp&gt;</code></td></tr>
+<tr><td><code>--epochs</code>, <code>--batch-size</code></td><td>aucun</td><td>Surcharges de la config</td></tr>
+<tr><td><code>--resume</code></td><td>aucun</td><td>Recharge <code>model_state_dict</code> d'un <code>.pt</code> (l'optimiseur n'est pas restauré)</td></tr>
+<tr><td><code>--dry-run</code></td><td>désactivé</td><td>Charge datasets et modèle, fait une passe avant, puis quitte</td></tr>
+</table>
+
+<h3 id="pipeline">Pipeline</h3>
+<ol>
+  <li>Lecture des deux YAML et construction des dataclasses (<code>TrainingConfig</code>, <code>LossConfig</code>, <code>AugConfig</code>).</li>
+  <li>Choix du device via <code>get_device</code>.</li>
+  <li>Création de <code>Torso21Dataset</code> pour train et test (le split test sert de validation) et des DataLoaders (<code>drop_last</code> en train, <code>pin_memory</code> sur CUDA).</li>
+  <li>Conversion ONNX vers PyTorch (<code>load_model_for_training</code>) et application de la stratégie de gel.</li>
+  <li>Ouverture du run MLflow, journalisation de la config aplatie.</li>
+  <li>Boucle d'époques dans <code>Trainer.train()</code> : warmup du LR, époque d'entraînement, validation, log des métriques, sauvegarde du meilleur checkpoint, pas du scheduler.</li>
+  <li>Finalisation : rechargement du meilleur checkpoint, export <code>best.onnx</code> (opset 17, batch dynamique), validation avec <code>onnx.checker</code>, log du modèle dans MLflow (nom enregistré <code>torso21-detector</code>).</li>
+</ol>
+<p>Sorties dans <code>runs/&lt;run-name&gt;/</code> : <code>best.pt</code> (époque, poids, état de l'optimiseur, métriques) et <code>best.onnx</code>.</p>
+
+<h3 id="freeze">Stratégie de gel sim-to-real</h3>
+<p><code>_freeze_sim_domain_layers</code> applique deux règles :</p>
+<ul>
+  <li>Les premiers <code>freeze_ratio</code> (70 %) des paramètres nommés ont <code>requires_grad=False</code>.</li>
+  <li>Toutes les couches <code>BatchNorm2d</code> sont gelées et maintenues en mode <code>eval</code> (y compris à chaque époque d'entraînement) pour préserver les statistiques du domaine simulé.</li>
+</ul>
+<p>Seule la fin du réseau est donc entraînée, avec AdamW sur les paramètres encore libres.</p>
+
+<h3 id="loss">Loss</h3>
+<p><code>DetectionLoss</code> travaille sur les sorties décodées par <code>DetectionHead</code> :</p>
+<ul>
+  <li><b>Assignation</b> : pour chaque boîte vérité terrain, la prédiction la plus proche par distance entre centres.</li>
+  <li><b>Boîtes</b> : perte CIoU (IoU, distance des centres, pénalité de ratio), pondérée par <code>box_weight</code>.</li>
+  <li><b>Classes</b> : BCE avec logits et label smoothing, pondérée par <code>cls_weight</code>.</li>
+  <li>Le terme <code>obj</code> est renvoyé à 0.</li>
+  <li>Si le format de sortie est <code>raw</code> (non reconnu), la loss vaut 0 avec un avertissement : l'entraînement ne converge pas.</li>
+</ul>
+
+<h3 id="metriques">Métriques</h3>
+<p><code>compute_map</code> calcule l'AP par classe avec une interpolation à 11 points, sur les seuils IoU 0.50 à 0.95 (pas de 0.05). Valeurs journalisées à chaque validation :</p>
+<table>
+<tr><th>Clé MLflow</th><th>Signification</th></tr>
+<tr><td><code>train/loss</code>, <code>train/box_loss</code>, <code>train/cls_loss</code></td><td>Moyennes sur l'époque</td></tr>
+<tr><td><code>val/loss</code></td><td>Loss moyenne en validation</td></tr>
+<tr><td><code>val/mAP50</code>, <code>val/mAP75</code>, <code>val/mAP50_95</code></td><td>mAP aux seuils correspondants</td></tr>
+<tr><td><code>val/AP50_cls&lt;i&gt;</code></td><td>AP@0.5 par classe (si définie)</td></tr>
+<tr><td><code>lr</code></td><td>Learning rate courant</td></tr>
+</table>
+
+<h2 id="inference">Inférence</h2>
+<pre><code># Une image
+python scripts/infer.py --model models/sim_data_det_0126.onnx --input image.jpg
+
+# Un dossier, avec options
+python scripts/infer.py \
+    --model   runs/exp1/best.onnx \
+    --input   dataset/test/images/ \
+    --conf    0.25 \
+    --iou     0.45 \
+    --output  runs/infer/ \
+    --show \
+    --benchmark</code></pre>
+<table>
+<tr><th>Option</th><th>Défaut</th><th>Effet</th></tr>
+<tr><td><code>--model</code></td><td>requis</td><td>Chemin du modèle ONNX</td></tr>
+<tr><td><code>--input</code></td><td>requis</td><td>Fichier image, dossier ou motif glob</td></tr>
+<tr><td><code>--output</code></td><td><code>runs/infer</code></td><td>Dossier des images annotées</td></tr>
+<tr><td><code>--conf</code></td><td><code>0.25</code></td><td>Seuil de confiance</td></tr>
+<tr><td><code>--iou</code></td><td><code>0.45</code></td><td>Seuil IoU du NMS</td></tr>
+<tr><td><code>--device</code></td><td><code>auto</code></td><td><code>auto</code>, <code>cuda</code>, <code>cpu</code></td></tr>
+<tr><td><code>--dataset</code></td><td><code>configs/dataset.yaml</code></td><td>Source des noms de classes</td></tr>
+<tr><td><code>--show</code></td><td>désactivé</td><td>Affiche chaque résultat avec <code>cv2.imshow</code> (touche <code>q</code> pour quitter)</td></tr>
+<tr><td><code>--benchmark</code></td><td>désactivé</td><td>Latence moyenne sur 50 passes (5 de chauffe) pour la première image</td></tr>
+<tr><td><code>--no-save</code></td><td>désactivé</td><td>N'écrit pas les images annotées</td></tr>
+</table>
+<h3>Chaîne de traitement</h3>
+<ol>
+  <li><code>OnnxRunner.preprocess</code> : BGR vers RGB, letterbox, division par 255, normalisation ImageNet, tenseur <code>[1, 3, H, W]</code>. La taille d'entrée est lue dans le modèle (640 par défaut si dynamique).</li>
+  <li><code>OnnxRunner.run</code> : exécution ONNX Runtime (CUDA puis CPU selon les providers disponibles).</li>
+  <li><code>decode_outputs</code> : détection automatique du format, sigmoïde, filtre de confiance, conversion en <code>x1 y1 x2 y2</code>, NMS par classe.</li>
+  <li>Retour aux coordonnées de l'image d'origine (retrait du padding et de l'échelle), boîtes normalisées dans [0, 1].</li>
+</ol>
+<h3>Formats de sortie reconnus</h3>
+<table>
+<tr><th>Format</th><th>Forme</th><th>Heuristique</th></tr>
+<tr><td>YOLO-v5</td><td><code>[B, N, 5 + C]</code></td><td>Objectness à l'indice 4, score = objectness × proba de classe</td></tr>
+<tr><td>YOLO-v8</td><td><code>[B, 4 + C, N]</code></td><td>Pas d'objectness, score = proba de classe max</td></tr>
+<tr><td>SSD</td><td>deux tenseurs <code>[B, N, 4]</code> et <code>[B, N, C]</code></td><td>Premier tenseur de dernière dimension 4</td></tr>
+<tr><td>raw</td><td>autre</td><td>Détections vides et avertissement</td></tr>
+</table>
+<p>L'API Python équivalente :</p>
+<pre><code>from torso.inference.onnx_runner import OnnxRunner
+
+runner = OnnxRunner("models/sim_data_det_0126.onnx", device="auto",
+                    conf_threshold=0.25, iou_threshold=0.45, num_classes=7)
+det = runner("image.jpg")   # {"boxes": [N,4], "scores": [N], "labels": [N]}</code></pre>
+
+<h2 id="mlflow">MLflow</h2>
+<pre><code>mlflow ui --backend-store-uri mlruns/ --port 5000</code></pre>
+<table>
+<tr><th>Catégorie</th><th>Contenu</th></tr>
+<tr><td>Params</td><td>Tout le contenu de <code>train.yaml</code> aplati (<code>training.epochs</code>, etc.) plus les métadonnées du modèle ONNX (valeurs tronquées à 500 caractères)</td></tr>
+<tr><td>Métriques</td><td>Une valeur par époque : voir la section Métriques</td></tr>
+<tr><td>Artefacts</td><td><code>checkpoints/best.pt</code> à chaque amélioration, <code>model/</code> (ONNX avec signature), <code>onnx_export/best.onnx</code></td></tr>
+<tr><td>Tags</td><td><code>git_commit</code>, <code>python_version</code>, <code>hostname</code>, plus ceux de <code>mlflow.tags</code></td></tr>
+<tr><td>Statut</td><td><code>FINISHED</code> si l'entraînement va au bout, <code>FAILED</code> sinon (y compris Ctrl+C)</td></tr>
+</table>
+
+<h2 id="api">Référence des modules</h2>
+<table>
+<tr><th>Module</th><th>Éléments principaux</th></tr>
+<tr><td><code>torso.data.dataset</code></td><td><code>Torso21Dataset</code>, <code>_letterbox</code>, <code>_adjust_boxes_for_letterbox</code>, <code>_parse_yolo_label</code>. Chaque échantillon : <code>image</code> [3,H,W], <code>boxes</code> (cx,cy,w,h normalisés), <code>labels</code>, <code>image_path</code>, <code>orig_size</code>, <code>scale</code>, <code>pad</code></td></tr>
+<tr><td><code>torso.data.transforms</code></td><td><code>AugConfig</code>, <code>get_train_transforms</code> (flip, luminosité/contraste, HSV, normalisation, ToTensor), <code>get_val_transforms</code> (normalisation seule). Boîtes YOLO, visibilité minimale 0.1</td></tr>
+<tr><td><code>torso.data.utils</code></td><td><code>collate_fn</code> : empile les images, garde les boîtes et labels en listes de longueur variable</td></tr>
+<tr><td><code>torso.model.loader</code></td><td><code>load_model_for_training</code>, <code>load_checkpoint</code>, <code>ModelConversionError</code>, lecture des métadonnées ONNX, gel des couches</td></tr>
+<tr><td><code>torso.model.head</code></td><td><code>DetectionHead</code> : détecte le format de sortie une fois, renvoie <code>(decoded, raw)</code></td></tr>
+<tr><td><code>torso.model.exporter</code></td><td><code>export_to_onnx</code> (opset 17, axes batch dynamiques, vérification <code>onnx.checker</code>)</td></tr>
+<tr><td><code>torso.training.trainer</code></td><td><code>Trainer</code>, <code>TrainingConfig</code> : AdamW, scheduler, warmup, clipping, sauvegarde du meilleur, export final</td></tr>
+<tr><td><code>torso.training.loss</code></td><td><code>DetectionLoss</code>, <code>LossConfig</code>, <code>_ciou_loss</code></td></tr>
+<tr><td><code>torso.training.metrics</code></td><td><code>compute_map</code></td></tr>
+<tr><td><code>torso.inference.onnx_runner</code></td><td><code>OnnxRunner</code> (<code>preprocess</code>, <code>run</code>, <code>postprocess</code>, <code>benchmark</code>)</td></tr>
+<tr><td><code>torso.inference.postprocess</code></td><td><code>decode_outputs</code>, NMS numpy, décodeurs v5, v8, SSD</td></tr>
+<tr><td><code>torso.utils.device</code></td><td><code>get_device</code></td></tr>
+<tr><td><code>torso.utils.mlflow_utils</code></td><td><code>setup_experiment</code>, <code>start_run</code>, <code>log_config</code>, <code>log_epoch_metrics</code>, <code>log_model_artifact</code>, <code>end_run</code></td></tr>
+<tr><td><code>torso.utils.visualization</code></td><td><code>draw_detections</code>, <code>save_detection_result</code></td></tr>
+</table>
+
+<h2 id="tests">Tests</h2>
+<pre><code>pytest tests/</code></pre>
+<ul>
+  <li><code>tests/test_dataset.py</code> : letterbox et ratio, parsing YOLO (valide, vide, mal formé), découverte des paires image/label, types retournés, label vide conservé, image sans label ignorée.</li>
+  <li><code>tests/test_postprocess.py</code> : NMS (meilleur score, boîtes disjointes, entrée vide), détection de format v5/v8/SSD, boîtes valides, seuil éliminant tout, format <code>raw</code>.</li>
+</ul>
+<p>Aucun test ne couvre le Trainer, la loss ou les métriques.</p>
+
+<h2 id="limites">Points d'attention</h2>
+<div class="note">
+<p>Constats issus de la lecture du code, utiles avant de comparer des runs ou de modifier le pipeline.</p>
+</div>
+<ul>
+  <li><b>Loss simplifiée</b> : l'assignation se fait par centre le plus proche, le terme de classe est construit à partir des scores décodés (marqué « placeholder » dans le code) et <code>obj_weight</code> n'a aucun effet.</li>
+  <li><b>Paramètres de config non utilisés</b> : <code>augmentation.random_scale_min/max</code> et <code>mosaic</code> sont lus ou déclarés mais aucune transformation correspondante n'est appliquée. <code>dataset.normalize_mean/std</code> et <code>image_extensions</code> sont aussi codés en dur dans le code (stats ImageNet, extensions png/jpg/jpeg).</li>
+  <li><b>Validation sur le split test</b> : le split test sert à la fois à choisir le meilleur checkpoint et à rapporter le mAP, ce qui rend le score optimiste.</li>
+  <li><b>Reprise partielle</b> : <code>--resume</code> restaure les poids mais pas l'optimiseur, le scheduler ni le compteur d'époques.</li>
+  <li><b>Format de sortie du modèle</b> : l'entraînement dépend de la détection automatique du format. Si elle retourne <code>raw</code>, la loss est nulle et le modèle ne s'améliore pas.</li>
+  <li><b>Boîtes décodées</b> : <code>DetectionHead</code> renvoie des <code>x1 y1 x2 y2</code>, alors que <code>DetectionLoss</code> les traite comme <code>cx cy w h</code> pour la perte CIoU. À vérifier avant d'interpréter les courbes de loss.</li>
+  <li><b>Dry run</b> : l'option charge les datasets et le modèle puis quitte après une passe avant ; aucun run MLflow n'est créé.</li>
+</ul>
+</main>
+</body>
+</html>
