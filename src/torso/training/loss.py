@@ -115,8 +115,9 @@ class DetectionLoss(nn.Module):
 
         device = predictions[0]["boxes"].device if predictions else torch.device("cpu")
 
-        total_box = torch.tensor(0.0, device=device)
-        total_cls = torch.tensor(0.0, device=device)
+        # requires_grad=True so backward() works even when no GT boxes are present
+        total_box = torch.tensor(0.0, device=device, requires_grad=True)
+        total_cls = torch.tensor(0.0, device=device, requires_grad=True)
 
         n_matched = 0
         for pred, tgt in zip(predictions, targets):
@@ -161,7 +162,9 @@ class DetectionLoss(nn.Module):
                 pred_labels_scores = pred["scores"][matched_pred_idx]
                 # Create a soft class distribution from scores (placeholder)
                 cls_pred = torch.zeros(len(gt_labels), num_classes, device=device)
-                cls_pred.scatter_(1, pred["labels"][matched_pred_idx].unsqueeze(1), pred_labels_scores.unsqueeze(1))
+                # Clamp predicted labels to valid range — model may have more output classes than num_classes
+                pred_cls_idx = pred["labels"][matched_pred_idx].clamp(0, num_classes - 1).unsqueeze(1)
+                cls_pred.scatter_(1, pred_cls_idx, pred_labels_scores.unsqueeze(1))
 
                 total_cls = total_cls + F.binary_cross_entropy_with_logits(
                     cls_pred, cls_target, reduction="mean"

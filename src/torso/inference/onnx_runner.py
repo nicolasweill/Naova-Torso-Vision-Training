@@ -116,6 +116,7 @@ class OnnxRunner:
             conf_threshold=self.conf_threshold,
             iou_threshold=self.iou_threshold,
             num_classes=self.num_classes,
+            input_size=(self.input_h, self.input_w),
         )
 
         boxes = detections["boxes"]

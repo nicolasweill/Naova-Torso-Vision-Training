@@ -62,10 +62,12 @@ def _detect_format(outputs: list[np.ndarray]) -> str:
     raw = outputs[0]
     if raw.ndim == 3:
         _, n, c = raw.shape
+        # YOLOv8: [B, 4+C, N_anchors] — small channel dim, large anchor dim
+        if n < c and 4 < n <= 100:
+            return "yolo_v8"
+        # YOLOv5: [B, N_anchors, 5+C]
         if c > 5 and n > c:
             return "yolo_v5"
-        if c < n:
-            return "yolo_v8"
         if c > 5:
             return "yolo_v5"
 
@@ -97,18 +99,19 @@ def _decode_yolo_v8(
     raw: np.ndarray,
     conf_threshold: float,
     num_classes: int,
+    input_size: tuple[int, int] = (640, 640),
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    # raw: [1, 4+C, N]
+    # raw: [1, 4+C, N] — boxes are pixel x1y1x2y2, class probs already sigmoided by model
     raw = raw[0].T  # [N, 4+C]
-    class_probs = 1.0 / (1.0 + np.exp(-raw[:, 4:4 + num_classes]))
+    class_probs = raw[:, 4:4 + num_classes]  # already sigmoided, no second sigmoid
     labels = class_probs.argmax(axis=1)
     scores = class_probs.max(axis=1)
 
     mask = scores >= conf_threshold
     raw, scores, labels = raw[mask], scores[mask], labels[mask]
 
-    cx, cy, bw, bh = raw[:, 0], raw[:, 1], raw[:, 2], raw[:, 3]
-    boxes = np.stack([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], axis=1)
+    ih, iw = input_size
+    boxes = raw[:, :4] / np.array([iw, ih, iw, ih], dtype=np.float32)  # normalize to [0,1]
     return boxes, scores, labels
 
 
@@ -130,6 +133,7 @@ def decode_outputs(
     conf_threshold: float = 0.25,
     iou_threshold: float = 0.45,
     num_classes: int = 7,
+    input_size: tuple[int, int] = (640, 640),
 ) -> dict:
     """
     Decode raw ONNX output into boxes/scores/labels with NMS.
@@ -144,7 +148,7 @@ def decode_outputs(
     if fmt == "yolo_v5":
         boxes, scores, labels = _decode_yolo_v5(raw_outputs[0], conf_threshold, num_classes)
     elif fmt == "yolo_v8":
-        boxes, scores, labels = _decode_yolo_v8(raw_outputs[0], conf_threshold, num_classes)
+        boxes, scores, labels = _decode_yolo_v8(raw_outputs[0], conf_threshold, num_classes, input_size)
     elif fmt == "ssd":
         boxes, scores, labels = _decode_ssd(raw_outputs, conf_threshold, num_classes)
     else:

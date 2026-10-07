@@ -46,6 +46,7 @@ def export_to_onnx(
             dynamic_axes=dynamic_axes,
             do_constant_folding=True,
             verbose=False,
+            dynamo=False,  # use legacy TorchScript-based exporter (no onnxscript required)
         )
 
     onnx_model = onnx.load(save_path)

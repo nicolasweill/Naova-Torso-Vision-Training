@@ -24,6 +24,7 @@ def draw_detections(
     labels: Sequence[int],
     class_names: Sequence[str],
     conf_threshold: float = 0.0,
+    show_score: bool = True,
 ) -> np.ndarray:
     """
     Draw bounding boxes on a BGR image (numpy array).
@@ -47,7 +48,7 @@ def draw_detections(
         cv2.rectangle(img, (px1, py1), (px2, py2), color, 2)
 
         name = class_names[int(label)] if int(label) < len(class_names) else str(label)
-        text = f"{name} {score:.2f}"
+        text = f"{name} {score:.2f}" if show_score else name
         (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
         cv2.rectangle(img, (px1, py1 - th - 4), (px1 + tw, py1), color, -1)
         cv2.putText(

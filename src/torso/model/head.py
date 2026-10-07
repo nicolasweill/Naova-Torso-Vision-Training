@@ -31,15 +31,15 @@ def _detect_output_format(raw: Union[torch.Tensor, list, tuple]) -> str:
 
     if raw.dim() == 3:
         b, n, c = raw.shape
-        # YOLO-v5: [B, N, 5 + num_classes] — objectness at index 4
-        if c > 5:
+        # YOLO-v8: [B, 4+num_classes, num_anchors] — small channel dim, large anchor dim
+        # Typical: channels in [5, 100], anchors in [400, 20000]
+        if n < c and 4 < n <= 100:
+            return "yolo_v8"
+        # YOLO-v5: [B, num_anchors, 5+num_classes] — large anchor dim, small class dim
+        if c < n and 5 < c <= 100:
             obj_col = raw[0, :, 4]
             if obj_col.min() >= 0.0 and obj_col.max() <= 1.0:
                 return "yolo_v5"
-        # YOLO-v8: [B, 4 + num_classes, N] — check if second dim looks like 4+C
-        if n > c:
-            # likely [B, 4+C, N] — transposed
-            return "yolo_v8"
 
     return "raw"
 
@@ -52,10 +52,16 @@ class DetectionHead(nn.Module):
     Detected formats: yolo_v5, yolo_v8, ssd, raw.
     """
 
-    def __init__(self, base_model: nn.Module, output_format: str = "auto") -> None:
+    def __init__(
+        self,
+        base_model: nn.Module,
+        output_format: str = "auto",
+        input_size: tuple[int, int] = (320, 320),
+    ) -> None:
         super().__init__()
         self.base_model = base_model
         self._output_format = output_format if output_format != "auto" else None
+        self.input_size = input_size
 
     @property
     def output_format(self) -> str | None:
@@ -90,7 +96,7 @@ class DetectionHead(nn.Module):
         if fmt == "yolo_v5":
             return self._decode_yolo_v5(raw, batch_size)
         if fmt == "yolo_v8":
-            return self._decode_yolo_v8(raw, batch_size)
+            return self._decode_yolo_v8(raw, batch_size, self.input_size)
         if fmt == "ssd":
             return self._decode_ssd(raw, batch_size)
 
@@ -121,22 +127,31 @@ class DetectionHead(nn.Module):
         ]
 
     @staticmethod
-    def _decode_yolo_v8(raw: torch.Tensor, batch_size: int) -> list[dict]:
-        # raw: [B, 4 + C, N]
+    def _decode_yolo_v8(
+        raw: torch.Tensor,
+        batch_size: int,
+        input_size: tuple[int, int] = (320, 320),
+    ) -> list[dict]:
+        # raw: [B, 4+C, N] — boxes already decoded (pixel x1y1x2y2), classes already sigmoided
         raw = raw.permute(0, 2, 1)  # → [B, N, 4+C]
-        boxes_raw = raw[..., :4]
-        class_probs = raw[..., 4:].sigmoid()
+        boxes_xyxy = raw[..., :4]   # pixel x1, y1, x2, y2
+        class_probs = raw[..., 4:]  # already sigmoided — do NOT apply sigmoid again
         scores, labels = class_probs.max(dim=-1)
 
-        cx = boxes_raw[..., 0]
-        cy = boxes_raw[..., 1]
-        w = boxes_raw[..., 2]
-        h = boxes_raw[..., 3]
-        x1 = cx - w / 2
-        y1 = cy - h / 2
-        x2 = cx + w / 2
-        y2 = cy + h / 2
-        boxes = torch.stack([x1, y1, x2, y2], dim=-1)
+        # Normalise pixel coords → [0, 1] then convert xyxy → cxcywh
+        # so predictions are compatible with normalised-cxcywh targets
+        h_img, w_img = input_size
+        scale = raw.new_tensor([w_img, h_img, w_img, h_img])
+        boxes_norm = boxes_xyxy / scale             # [B, N, 4] in [0, 1]
+        x1 = boxes_norm[..., 0]
+        y1 = boxes_norm[..., 1]
+        x2 = boxes_norm[..., 2]
+        y2 = boxes_norm[..., 3]
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+        bw = (x2 - x1).clamp(min=0)
+        bh = (y2 - y1).clamp(min=0)
+        boxes = torch.stack([cx, cy, bw, bh], dim=-1)  # normalised cxcywh
 
         return [
             {"boxes": boxes[i], "scores": scores[i], "labels": labels[i]}

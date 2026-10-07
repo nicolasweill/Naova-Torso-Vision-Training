@@ -35,7 +35,12 @@ python3 scripts/infer.py \
 runs/run_1777849666/best.onnx
 
 python3 scripts/infer.py \
-    --model runs/run_1777849666/best.onnx \
+    --model runs/run_1778360311/best.onnx\
+    --input dataset/test/images/ \
+    --conf 0.25 #0.5
+
+python3 scripts/infer.py \
+    --model runs/run_1778360311/best.onnx\
     --input dataset/test/images/ \
     --conf 0.25 #0.5
 
@@ -141,3 +146,21 @@ Logged per run:
 - **Metrics**: `train/loss`, `val/mAP50`, `val/mAP75`, per-class AP — one point per epoch
 - **Artifacts**: best ONNX model with signature, config snapshots
 - **Tags**: `git_commit`, `base_model`, `dataset`, `python_version`, `hostname`
+
+
+## Recuperer les meilleurs hyperparams depuis MLFLOW
+
+# Lister tous les runs avec leurs métriques
+python3 scripts/best_model.py --list
+
+# Télécharger le meilleur modèle ONNX (défaut)
+python3 scripts/best_model.py
+
+# Utiliser une autre métrique
+python3 scripts/best_model.py --metric val/mAP75
+
+# Télécharger le checkpoint PyTorch (.pt)
+python3 scripts/best_model.py --artifact checkpoints --output runs/best_pt
+
+# Changer le dossier de sortie
+python3 scripts/best_model.py --output models/best_finetuned

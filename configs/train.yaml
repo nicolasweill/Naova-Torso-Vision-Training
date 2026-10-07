@@ -12,7 +12,7 @@ training:
   lr_scheduler: cosine        # cosine | step | none
   warmup_epochs: 3
   grad_clip_norm: 10.0
-  val_every_n_epochs: 5
+  val_every_n_epochs: 1
   save_best_metric: "val/mAP50"
 
 loss:

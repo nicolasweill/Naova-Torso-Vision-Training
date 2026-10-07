@@ -84,7 +84,7 @@ class Trainer:
         run_name: str | None = None,
     ) -> None:
         self.model = model
-        self.detection_head = DetectionHead(model)
+        self.detection_head = DetectionHead(model, input_size=cfg.input_size)
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.device = device
@@ -119,6 +119,17 @@ class Trainer:
                 "lr": self.optimizer.param_groups[0]["lr"],
             }
             log_epoch_metrics(all_metrics, step=epoch)
+
+            # ── Console summary ──────────────────────────────────────────────
+            map50 = val_metrics.get("mAP50", float("nan"))
+            logger.info(
+                "Epoch %d/%d  train_loss=%.4f  val/mAP50=%.4f  lr=%.2e",
+                epoch + 1,
+                self.cfg.epochs,
+                train_metrics.get("loss", float("nan")),
+                map50,
+                self.optimizer.param_groups[0]["lr"],
+            )
 
             if val_metrics:
                 self._maybe_save_best(epoch, val_metrics)
@@ -199,14 +210,14 @@ class Trainer:
             total_loss += losses["total"].item()
             n_batches += 1
 
-            # Convert preds to xyxy for mAP computation
+            # DetectionHead returns normalised cxcywh; convert to xyxy for mAP
             for pred in decoded:
                 boxes = pred["boxes"].cpu()
                 scores = pred["scores"].cpu()
                 labels = pred["labels"].cpu()
-                # cx,cy,w,h → x1,y1,x2,y2 if YOLO format
                 if self.detection_head.output_format in ("yolo_v5", "yolo_v8"):
-                    pass  # already decoded in DetectionHead
+                    cx, cy, bw, bh = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+                    boxes = torch.stack([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2], dim=-1)
                 all_preds.append({"boxes": boxes, "scores": scores, "labels": labels})
 
             for tgt in targets:
